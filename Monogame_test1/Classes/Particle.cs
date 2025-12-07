@@ -15,20 +15,23 @@ namespace Monogame_test1.Classes
             this.Position = Position;
             this.Size = Size;
         }
-        public bool Intersects(Particle particle)
+        public bool Intersects(Particle other, out Vector2 normal, out float depth)
         {
+            Vector2 direction = other.Position - this.Position;
+            float distance = direction.Length();
+            float radius1 = Size / 2f;
+            float radius2 = other.Size / 2f;
+            float minDistance = radius1 + radius2;
 
-            var center0 = particle.Position;
-            var center1 = Position;
-
-            var dist = Vector2.Distance(center0, center1);
-            var rads = Size / 2 + particle.Size / 2;
-
-            if (dist > rads)
+            if (distance > minDistance)
             {
+                normal = Vector2.Zero;
+                depth = 0;
                 return false;
             }
 
+            normal = OwnMath.Normalize(direction);
+            depth = minDistance - distance;
             return true;
         }
     }

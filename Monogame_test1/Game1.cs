@@ -28,7 +28,7 @@ namespace Monogame_test1
         private List<Particle>[,] particlesGrid;
         int gridHeight;
         int gridWidth;
-        int gridSize = 10;
+        int gridSize = 20;
 
         Texture2D circle {get; set;}
 
@@ -39,8 +39,6 @@ namespace Monogame_test1
             _graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
-
-            
         }
 
         protected override void Initialize()
@@ -62,9 +60,9 @@ namespace Monogame_test1
                 }
             }
 
-            //Thread CollisionsSolver = new(() => CollisionsThread(cancellationTokenSource.Token));
-            //CollisionsSolver.IsBackground = true;
-            //CollisionsSolver.Start();
+            Thread CollisionsSolver = new(() => CalcCollisions(cancellationTokenSource.Token));
+            CollisionsSolver.IsBackground = true;
+            CollisionsSolver.Start();
 
             base.Initialize();
         }
@@ -85,7 +83,7 @@ namespace Monogame_test1
 
             if (prevMouseState.ScrollWheelValue < curMouseState.ScrollWheelValue)
             {
-                BrushSize++;
+                BrushSize = Math.Clamp(BrushSize + 1, 0, 2);
             }
             else if(curMouseState.ScrollWheelValue < prevMouseState.ScrollWheelValue)
             {
@@ -104,8 +102,16 @@ namespace Monogame_test1
 
             foreach (var particle in particles)
             {
+                particle.Velocity += OwnMath.Normalize(new Vector2(curMouseState.X, curMouseState.Y) - particle.Position)*0.01f;
                 particle.Position += particle.Velocity;
-                
+                try
+                {
+                    particlesGrid[(int)particle.Position.X / gridSize, (int)particle.Position.Y / gridSize].Add(particle);
+                }
+                catch
+                {
+
+                }
             }
 
             prevMouseState = curMouseState;
@@ -123,116 +129,121 @@ namespace Monogame_test1
 
             foreach (var particle in particles)
             {
-                try
-                {
-                    particlesGrid[(int)particle.Position.X / gridSize, (int)particle.Position.Y / gridSize].Add(particle);
-                }
-                catch
-                {
-
-                }
-                particle.Velocity = OwnMath.Normalize(new Vector2(curMouseState.X, curMouseState.Y) - particle.Position);
                 _spriteBatch.Draw(circle, new Rectangle((int)particle.Position.X - particle.Size / 2, (int)particle.Position.Y - particle.Size / 2, particle.Size, particle.Size), Color.Black);
             }
 
-            CalcCollisions();
-
             _spriteBatch.End();
-            // TODO: Add your drawing code here
 
             base.Draw(gameTime);
         }
 
-        private void CalcCollisions()
+        private void CalcCollisions(CancellationToken token)
         {
-            int gridX;
-            int gridY;
-            Vector2 normal;
-            float depth;
-            try
-            {
-                if (particles.Count > 1)
+            while (!token.IsCancellationRequested) {
+                try
                 {
-                    foreach(var particle in particles)
+                    if (particles.Count > 1)
                     {
-                        gridX = (int)particle.Position.X / gridSize;
-                        gridY = (int)particle.Position.Y / gridSize;
-                        for (int gridCheckX = -1; gridCheckX < 2; gridCheckX++)
+                        for(int gridX = 1; gridX < gridWidth; gridX++)
                         {
-                            for (int gridCheckY = -1; gridCheckY < 2; gridCheckY++)
+                            for (int gridY = 1; gridY < gridHeight; gridY++)
                             {
-                                foreach (var particle1 in particlesGrid[gridX, gridY])
+                                if (particlesGrid[gridX, gridY].Count == 0) { continue; }
+                                for (int gridCheckX = -1; gridCheckX < 2; gridCheckX++)
                                 {
-                                    foreach (var particle2 in particlesGrid[gridX + gridCheckX, gridY + gridCheckY])
+                                    for (int gridCheckY = -1; gridCheckY < 2; gridCheckY++)
                                     {
-                                        if (particle1 == particle2) continue;
-                                        if (particle1.Intersects(particle2))
+                                        if (particlesGrid[gridX + gridCheckX, gridY + gridCheckY].Count == 0) { continue; }
+                                        foreach (var particle1 in particlesGrid[gridX, gridY])
                                         {
-                                            normal = OwnMath.Normalize(particle1.Position-particle2.Position);
-                                            depth = Vector2.Distance(particle1.Position, particle2.Position);
-                                            particle1.Position += normal;
-                                            particle2.Position += (normal*-1);
+                                            foreach (var particle2 in particlesGrid[gridX + gridCheckX, gridY + gridCheckY])
+                                            {
+                                                if (particle1 != null && particle2 != null)
+                                                {
+                                                    ResolveCollision(particle1, particle2);
+                                                }
+                                                else
+                                                {
+                                                    break;
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    foreach (var Cell in particlesGrid)
-                    {
-                        Cell.Clear();
-                    }
-
-                }
-            }
-            catch
-            {
-
-            }
-        }
-        private void CalcCollisionForParticle(Particle particle)
-        {
-            int gridX;
-            int gridY;
-            Vector2 normal;
-            float depth;
-            try
-            {
-                gridX = (int)particle.Position.X / gridSize;
-                gridY = (int)particle.Position.Y / gridSize;
-                for (int gridCheckX = -1; gridCheckX < 2; gridCheckX++)
-                {
-                    for (int gridCheckY = -1; gridCheckY < 2; gridCheckY++)
-                    {
-                        foreach (var particle1 in particlesGrid[gridX, gridY])
+                        foreach (var Cell in particlesGrid)
                         {
-                            foreach (var particle2 in particlesGrid[gridX + gridCheckX, gridY + gridCheckY])
-                            {
-
-                                if (particle1.Intersects(particle2))
-                                {
-                                    normal = OwnMath.Normalize(particle1.Position - particle2.Position);
-                                    depth = Vector2.Distance(particle1.Position, particle2.Position);
-                                    particle1.Position += normal;
-                                    particle2.Position += (normal * -1);
-                                }
-                            }
+                            Cell.Clear();
                         }
+
                     }
                 }
-
-                foreach (var Cell in particlesGrid)
+                catch
                 {
-                    Cell.Clear();
+
                 }
-
-            }
-            catch
-            {
-
+                Thread.Sleep(1);
             }
         }
 
+        private void ResolveCollision(Particle a, Particle b)
+        {
+            if (a.Intersects(b, out Vector2 normal, out float depth))
+            {
+                float radiusA = a.Size / 2f;
+                float radiusB = b.Size / 2f;
+                float totalRadius = radiusA + radiusB;
+
+                float weightA = radiusB / totalRadius;
+                float weightB = radiusA / totalRadius;
+
+                Vector2 correction = normal * depth * 0.5f;
+                a.Position -= -correction * -weightA;
+                b.Position += -correction * -weightB;
+
+                Vector2 relativeVelocity = b.Velocity - a.Velocity;
+                float velocityAlongNormal = Vector2.Dot(relativeVelocity, normal);
+
+                if (velocityAlongNormal > 0) return;
+
+                float elasticity = 0.8f;
+                float impulseScalar = -(1 + elasticity) * velocityAlongNormal;
+                impulseScalar /= (1 / radiusA + 1 / radiusB);
+
+                Vector2 impulse = normal * impulseScalar;
+                a.Velocity -= impulse / radiusA * 0.5f;
+                b.Velocity += impulse / radiusB * 0.5f;
+                CheckBorder(a);
+
+                CheckBorder(b);
+            }
+
+        }
+
+        private void CheckBorder(Particle particle)
+        {
+            if (particle.Position.X - particle.Size*2 < 0)
+            {
+                particle.Position = new Vector2(particle.Size*2, particle.Position.Y);
+                particle.Velocity = new Vector2(-particle.Velocity.X, particle.Velocity.Y);
+            }
+            if (particle.Position.X + particle.Size * 2 > Window.ClientBounds.Width)
+            {
+                particle.Position = new Vector2(Window.ClientBounds.Width - particle.Size * 2, particle.Position.Y);
+                particle.Velocity = new Vector2(-particle.Velocity.X, particle.Velocity.Y);
+            }
+            if (particle.Position.Y - particle.Size * 2 < 0)
+            {
+                particle.Position = new Vector2(particle.Position.X, particle.Size * 2);
+                particle.Velocity = new Vector2(particle.Velocity.X, -particle.Velocity.Y);
+            }
+            if (particle.Position.Y + particle.Size * 2 > Window.ClientBounds.Height)
+            {
+                particle.Position = new Vector2(particle.Position.X, Window.ClientBounds.Height - particle.Size * 2);
+                particle.Velocity = new Vector2(particle.Velocity.X, -particle.Velocity.Y);
+            }
+        }
     }
 }

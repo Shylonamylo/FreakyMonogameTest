@@ -12,16 +12,11 @@ namespace Monogame_test1.Classes.OwnMathForVectors
     {
         public static Vector2 Normalize(Vector2 vector)
         {
-            float Magnitude = (float)Math.Sqrt(Math.Pow(vector.X, 2)+Math.Pow(vector.Y, 2));
-            if (Magnitude!=0)
+            if (vector != Vector2.Zero)
             {
-                return new Vector2(vector.X / Magnitude, vector.Y / Magnitude + 0);
+                vector.Normalize();
             }
-            else
-            {
-                return new Vector2(vector.X, vector.Y);
-            }
-            
+            return vector;
         }
     }
 }
