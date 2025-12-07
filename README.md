@@ -1,1 +1,2 @@
-Freaky NoName Monogame test project :P
+Freaky NoName Monogame test project with fun circle physics
+:P
