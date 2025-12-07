@@ -1,1 +1,1 @@
-Freaky NoName Monogame test project \_(^-^)-/
+Freaky NoName Monogame test project :P
