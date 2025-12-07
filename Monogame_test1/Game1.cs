@@ -20,8 +20,15 @@ namespace Monogame_test1
 
         private MouseState prevMouseState {  get; set; }
         private MouseState curMouseState { get; set; }
-        
-        private bool CheckCollisions = false;
+
+        private CancellationTokenSource cancellationTokenSource;
+        private bool isExiting = false;
+
+
+        private List<Particle>[,] particlesGrid;
+        int gridHeight;
+        int gridWidth;
+        int gridSize = 10;
 
         Texture2D circle {get; set;}
 
@@ -33,13 +40,31 @@ namespace Monogame_test1
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
 
-            Thread CollisionsSolver = new(Collisions);
-            CollisionsSolver.Start();
+            
         }
 
         protected override void Initialize()
         {
             // TODO: Add your initialization logic here
+
+            cancellationTokenSource = new CancellationTokenSource();
+
+            gridWidth = Window.ClientBounds.Width / gridSize;
+            gridHeight = Window.ClientBounds.Height / gridSize;
+
+            particlesGrid = new List<Particle>[gridWidth,gridHeight];
+
+            for (int i = 0; i < gridWidth; i++)
+            {
+                for (int j = 0; j < gridHeight; j++)
+                {
+                    particlesGrid[i, j] = new List<Particle>();
+                }
+            }
+
+            //Thread CollisionsSolver = new(() => CollisionsThread(cancellationTokenSource.Token));
+            //CollisionsSolver.IsBackground = true;
+            //CollisionsSolver.Start();
 
             base.Initialize();
         }
@@ -47,8 +72,8 @@ namespace Monogame_test1
         protected override void LoadContent()
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
+
             circle = Content.Load<Texture2D>("circle_texture");
-            // TODO: use this.Content to load your game content here
         }
 
         protected override void Update(GameTime gameTime)
@@ -80,11 +105,10 @@ namespace Monogame_test1
             foreach (var particle in particles)
             {
                 particle.Position += particle.Velocity;
+                
             }
 
             prevMouseState = curMouseState;
-
-            CheckCollisions = true;
 
             base.Update(gameTime);
         }
@@ -99,39 +123,116 @@ namespace Monogame_test1
 
             foreach (var particle in particles)
             {
+                try
+                {
+                    particlesGrid[(int)particle.Position.X / gridSize, (int)particle.Position.Y / gridSize].Add(particle);
+                }
+                catch
+                {
+
+                }
                 particle.Velocity = OwnMath.Normalize(new Vector2(curMouseState.X, curMouseState.Y) - particle.Position);
                 _spriteBatch.Draw(circle, new Rectangle((int)particle.Position.X - particle.Size / 2, (int)particle.Position.Y - particle.Size / 2, particle.Size, particle.Size), Color.Black);
             }
-            
+
+            CalcCollisions();
+
             _spriteBatch.End();
             // TODO: Add your drawing code here
 
             base.Draw(gameTime);
         }
 
-        private void Collisions()
+        private void CalcCollisions()
         {
-            while (true)
+            int gridX;
+            int gridY;
+            Vector2 normal;
+            float depth;
+            try
             {
-                try
+                if (particles.Count > 1)
                 {
-                    foreach (var particle1 in particles)
+                    foreach(var particle in particles)
                     {
-                        foreach (var particle2 in particles)
+                        gridX = (int)particle.Position.X / gridSize;
+                        gridY = (int)particle.Position.Y / gridSize;
+                        for (int gridCheckX = -1; gridCheckX < 2; gridCheckX++)
                         {
-                            if (particle1.Intersects(particle2))
+                            for (int gridCheckY = -1; gridCheckY < 2; gridCheckY++)
                             {
-                                particle1.Position -= OwnMath.Normalize(particle2.Position - particle1.Position)*2;
+                                foreach (var particle1 in particlesGrid[gridX, gridY])
+                                {
+                                    foreach (var particle2 in particlesGrid[gridX + gridCheckX, gridY + gridCheckY])
+                                    {
+                                        if (particle1 == particle2) continue;
+                                        if (particle1.Intersects(particle2))
+                                        {
+                                            normal = OwnMath.Normalize(particle1.Position-particle2.Position);
+                                            depth = Vector2.Distance(particle1.Position, particle2.Position);
+                                            particle1.Position += normal;
+                                            particle2.Position += (normal*-1);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    foreach (var Cell in particlesGrid)
+                    {
+                        Cell.Clear();
+                    }
+
+                }
+            }
+            catch
+            {
+
+            }
+        }
+        private void CalcCollisionForParticle(Particle particle)
+        {
+            int gridX;
+            int gridY;
+            Vector2 normal;
+            float depth;
+            try
+            {
+                gridX = (int)particle.Position.X / gridSize;
+                gridY = (int)particle.Position.Y / gridSize;
+                for (int gridCheckX = -1; gridCheckX < 2; gridCheckX++)
+                {
+                    for (int gridCheckY = -1; gridCheckY < 2; gridCheckY++)
+                    {
+                        foreach (var particle1 in particlesGrid[gridX, gridY])
+                        {
+                            foreach (var particle2 in particlesGrid[gridX + gridCheckX, gridY + gridCheckY])
+                            {
+
+                                if (particle1.Intersects(particle2))
+                                {
+                                    normal = OwnMath.Normalize(particle1.Position - particle2.Position);
+                                    depth = Vector2.Distance(particle1.Position, particle2.Position);
+                                    particle1.Position += normal;
+                                    particle2.Position += (normal * -1);
+                                }
                             }
                         }
                     }
                 }
-                catch
-                {
 
+                foreach (var Cell in particlesGrid)
+                {
+                    Cell.Clear();
                 }
-                
+
+            }
+            catch
+            {
+
             }
         }
+
     }
 }

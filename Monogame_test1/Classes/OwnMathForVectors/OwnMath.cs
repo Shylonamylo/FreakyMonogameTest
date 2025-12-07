@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 namespace Monogame_test1.Classes.OwnMathForVectors
 {
+    
     public static class OwnMath
     {
         public static Vector2 Normalize(Vector2 vector)
